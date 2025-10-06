@@ -1,10 +1,11 @@
 """
-Minimal FastAPI app for deployment testing
+RAG API - Gradually building up features
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import uvicorn
+from config import config
 
 # Create FastAPI app
 app = FastAPI(
@@ -28,7 +29,9 @@ async def root():
     return {
         "message": "RAG API is running!",
         "status": "healthy",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "environment": config.ENVIRONMENT,
+        "features": ["basic_api", "config_system"]
     }
 
 @app.get("/health")
@@ -36,7 +39,13 @@ async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "message": "API is working perfectly"
+        "message": "API is working perfectly",
+        "environment": config.ENVIRONMENT,
+        "config_loaded": True,
+        "databases": {
+            "neo4j": "configured" if config.NEO4J_URI else "not_configured",
+            "pinecone": "configured" if config.PINECONE_API_KEY else "not_configured"
+        }
     }
 
 @app.post("/test")
@@ -48,16 +57,13 @@ async def test_endpoint(data: dict):
     }
 
 if __name__ == "__main__":
-    # Get port from environment (Render provides this)
-    host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", 8000))
-    
-    print(f"🚀 Starting minimal RAG API on {host}:{port}")
+    print(f"🚀 Starting RAG API on {config.HOST}:{config.PORT}")
+    print(f"🔧 Environment: {config.ENVIRONMENT}")
     
     uvicorn.run(
         "main:app",
-        host=host,
-        port=port,
+        host=config.HOST,
+        port=config.PORT,
         reload=False,
         log_level="info"
     )
