@@ -1,16 +1,12 @@
 services:
   - type: web
-    name: rag-api
+    name: rag-api-minimal
     env: python
     region: oregon
     plan: starter
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT --timeout-keep-alive 30
+    startCommand: python main.py
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
-      - key: ENVIRONMENT
-        value: production
-      - key: HOST
-        value: 0.0.0.0
