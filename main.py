@@ -1313,12 +1313,13 @@ async def get_neo4j_details():
         if not neo4j_manager:
             raise HTTPException(status_code=503, detail="Neo4j not available")
         
-        # Get detailed statistics with single connection
+        # Get detailed statistics (exactly like original)
         queries = {
             "documents": "MATCH (d:Document) RETURN count(d) as count",
             "entities": "MATCH (e:Entity) RETURN count(e) as count",
             "relationships": "MATCH ()-[r]->() RETURN count(r) as count",
-            "document_types": "MATCH (d:Document) RETURN d.domain as type, count(d) as count ORDER BY count DESC LIMIT 10",
+            "document_types": "MATCH (d:Document) RETURN d.document_type as type, count(d) as count ORDER BY count DESC",
+            "entity_types": "MATCH (e:Entity) RETURN e.type as type, count(e) as count ORDER BY count DESC",
             "recent_documents": """
                 MATCH (d:Document) 
                 RETURN d.title as title, d.created_at as created_at, d.id as id
@@ -1329,16 +1330,8 @@ async def get_neo4j_details():
         
         results = execute_multiple_neo4j_queries(queries)
         
-        return {
-            "database": "Neo4j Graph Database",
-            "status": "Connected",
-            "statistics": results,
-            "connection_info": {
-                "uri": "Connected to Neo4j Aura",
-                "database": "neo4j"
-            },
-            "timestamp": datetime.now().isoformat()
-        }
+        # Return results directly (like original)
+        return results
         
     except Exception as e:
         logger.error(f"Error getting Neo4j details: {e}")
@@ -1387,15 +1380,13 @@ async def get_pinecone_details():
                 "sample_metadata": metadatas[:3] if metadatas else []
             }
         
+        # Return in original format
         return {
-            "database": "Pinecone Vector Database",
-            "status": "Connected",
             "collection_name": "documents",
             "sample_results_count": len(results.get("documents", [[]])[0]) if results.get("documents") else 0,
             "metadata_analysis": metadata_analysis,
             "vector_dimensions": 384,  # Based on all-MiniLM-L6-v2
-            "sample_similarities": results.get("distances", [[]])[0][:5] if results.get("distances") else [],
-            "timestamp": datetime.now().isoformat()
+            "sample_similarities": results.get("distances", [[]])[0][:5] if results.get("distances") else []
         }
         
     except Exception as e:
