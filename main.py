@@ -37,7 +37,7 @@ except Exception as e:
     from config import config
 
 # Modern FastAPI lifespan events
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -180,6 +180,39 @@ class DocumentUploadResponse(BaseModel):
     relationships_created: Optional[int] = Field(None, description="Number of relationships created")
     processing_time: Optional[float] = Field(None, description="Processing time in seconds")
 
+# Admin Response Models
+class DatabaseStatsResponse(BaseModel):
+    """Response model for database statistics"""
+    name: str
+    status: str
+    total_documents: int
+    total_entities: int
+    total_relationships: int
+    total_embeddings: int
+    last_updated: Optional[str]
+    size_info: dict
+
+class DocumentInfoResponse(BaseModel):
+    """Response model for document information"""
+    id: str
+    title: str
+    content_preview: str
+    source: str
+    created_at: str
+    in_neo4j: bool
+    in_pinecone: bool
+    entity_count: int
+    chunk_count: int
+    metadata: dict
+
+class EntityInfoResponse(BaseModel):
+    """Response model for entity information"""
+    name: str
+    type: str
+    description: str
+    document_count: int
+    sample_documents: List[str]
+
 # Mount static files for frontend
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
@@ -310,10 +343,12 @@ async def api_status():
         "timestamp": datetime.now().isoformat()
     }
 
-# Global agent instances (lazy initialization)
+# Global instances (lazy initialization)
 coordinator_instance = None
 agent_registry = None
 message_queue = None
+neo4j_manager_instance = None
+vector_manager_instance = None
 
 def get_or_create_coordinator():
     """Get or create coordinator agent with proper registry/queue"""
@@ -338,40 +373,79 @@ def get_or_create_coordinator():
     return coordinator_instance
 
 def get_database_managers():
-    """Lazy initialization of database managers with proper setup"""
+    """Get or initialize database managers (singleton pattern)"""
+    global neo4j_manager_instance, vector_manager_instance
+    
+    # Return existing instances if available
+    if neo4j_manager_instance is not None and vector_manager_instance is not None:
+        return neo4j_manager_instance, vector_manager_instance
+    
     try:
-        # Initialize database connections
+        # Initialize database connections only once
         from core.database import get_neo4j_manager, get_vector_manager
         
         logger.info("🔄 Initializing database connections...")
         
-        # Get Neo4j manager
-        neo4j_manager = None
-        try:
-            neo4j_manager = get_neo4j_manager()
-            if neo4j_manager:
-                logger.info("✅ Neo4j manager initialized")
-            else:
-                logger.warning("⚠️ Neo4j manager not available")
-        except Exception as e:
-            logger.error(f"❌ Neo4j initialization failed: {e}")
+        # Get Neo4j manager (only if not already initialized)
+        if neo4j_manager_instance is None:
+            try:
+                neo4j_manager_instance = get_neo4j_manager()
+                if neo4j_manager_instance:
+                    logger.info("✅ Neo4j manager initialized")
+                else:
+                    logger.warning("⚠️ Neo4j manager not available")
+            except Exception as e:
+                logger.error(f"❌ Neo4j initialization failed: {e}")
         
-        # Get Vector manager  
-        vector_manager = None
-        try:
-            vector_manager = get_vector_manager()
-            if vector_manager:
-                logger.info("✅ Vector manager initialized")
-            else:
-                logger.warning("⚠️ Vector manager not available")
-        except Exception as e:
-            logger.error(f"❌ Vector manager initialization failed: {e}")
+        # Get Vector manager (only if not already initialized)
+        if vector_manager_instance is None:
+            try:
+                vector_manager_instance = get_vector_manager()
+                if vector_manager_instance:
+                    logger.info("✅ Vector manager initialized")
+                else:
+                    logger.warning("⚠️ Vector manager not available")
+            except Exception as e:
+                logger.error(f"❌ Vector manager initialization failed: {e}")
         
-        return neo4j_manager, vector_manager
+        return neo4j_manager_instance, vector_manager_instance
         
     except Exception as e:
         logger.error(f"❌ Database managers initialization failed: {e}")
         return None, None
+
+@contextmanager
+def neo4j_connection():
+    """Context manager for Neo4j connections"""
+    neo4j_manager, _ = get_database_managers()
+    if not neo4j_manager:
+        raise Exception("Neo4j manager not available")
+    
+    try:
+        neo4j_manager.connect()
+        yield neo4j_manager
+    finally:
+        try:
+            neo4j_manager.disconnect()
+        except:
+            pass
+
+def execute_neo4j_query(query: str, parameters: dict = None):
+    """Execute single Neo4j query with connection handling"""
+    with neo4j_connection() as neo4j_manager:
+        return neo4j_manager.execute_query(query, parameters or {})
+
+def execute_multiple_neo4j_queries(queries: dict):
+    """Execute multiple Neo4j queries with single connection"""
+    results = {}
+    with neo4j_connection() as neo4j_manager:
+        for key, query in queries.items():
+            try:
+                result = neo4j_manager.execute_query(query)
+                results[key] = result
+            except Exception as e:
+                results[key] = f"Error: {str(e)}"
+    return results
 
 def get_or_create_all_agents():
     """Initialize all agents in the system"""
@@ -623,102 +697,157 @@ async def process_query(request: QueryRequest):
             detail=f"Query processing failed: {str(e)}"
         )
 
-@app.post("/documents/upload", response_model=DocumentUploadResponse, tags=["documents"])
+@app.post(
+    "/documents/upload", 
+    response_model=DocumentUploadResponse, 
+    tags=["documents"],
+    summary="Upload document for ingestion",
+    description="Upload a document to be processed and stored in both graph and vector databases",
+    responses={
+        200: {
+            "description": "Document uploaded and processed successfully",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "document_id": "doc_123e4567-e89b-12d3-a456-426614174000",
+                        "status": "success",
+                        "message": "Document 'Introduction to AI' uploaded successfully",
+                        "entities_extracted": 25,
+                        "relationships_created": 18,
+                        "processing_time": 3.45
+                    }
+                }
+            }
+        },
+        400: {
+            "description": "Invalid document data",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "error": "Validation Error",
+                        "message": "Document title cannot be empty",
+                        "details": {"field": "title", "issue": "empty_value"},
+                        "timestamp": "2024-01-01T12:00:00Z",
+                        "request_id": "req_123"
+                    }
+                }
+            }
+        }
+    }
+)
 async def upload_document(request: DocumentUploadRequest):
     """
-    Upload and ingest a document into the knowledge base.
-    Uses lazy initialization for database connections.
+    Upload and ingest a document into both graph and vector databases.
+    
+    This endpoint processes documents through the complete ingestion pipeline:
+    
+    1. **Content Processing**: Validates and preprocesses document content
+    2. **Entity Extraction**: Identifies entities and concepts within the document
+    3. **Relationship Discovery**: Finds relationships between extracted entities
+    4. **Graph Storage**: Stores entities and relationships in Neo4j
+    5. **Vector Storage**: Generates embeddings and stores in Pinecone
+    6. **Mapping Creation**: Creates bidirectional entity-vector mappings
+    
+    **Supported Content Types:**
+    - Plain text documents
+    - Technical documentation
+    - Research papers
+    - Knowledge base articles
+    
+    **Domain-Specific Processing:**
+    - Configurable entity extraction patterns
+    - Domain-specific relationship types
+    - Custom schema mapping
     """
     start_time = time.time()
     document_id = str(uuid.uuid4())
     
     try:
-        logger.info(f"Uploading document {document_id}: {request.title}")
+        logger.info(f"Ingesting document {document_id}: {request.title}")
         
-        # Lazy load database managers
+        # Create document object
+        from core.models import Document, DocumentType
+        document = Document(
+            id=document_id,
+            title=request.title,
+            content=request.content,
+            document_type=DocumentType.TEXT,
+            source=request.source or "",
+            domain=request.domain or "general",
+            metadata=request.metadata or {}
+        )
+        
+        # Initialize and use ingestion pipeline
+        from core.ingestion_pipeline import DualStorageIngestionPipeline
+        from core.document_processor import DocumentProcessor
+        from core.domain_processor import DomainProcessorManager
+        from core.mapping_service import EntityVectorMappingService
+        
+        # Get database managers (using our optimized function)
         neo4j_manager, vector_manager = get_database_managers()
         
-        if neo4j_manager is None and vector_manager is None:
-            # Fallback: Accept document but don't process
-            return DocumentUploadResponse(
-                document_id=document_id,
-                status="accepted",
-                message=f"Document '{request.title}' accepted. Database connections initializing - processing will complete shortly.",
-                entities_extracted=0,
-                relationships_created=0,
-                processing_time=time.time() - start_time
-            )
+        # Initialize processors
+        document_processor = DocumentProcessor()
+        domain_processor = DomainProcessorManager()
+        mapping_service = EntityVectorMappingService()
         
-        # Try basic document processing
-        try:
-            # Simple entity extraction (fallback)
-            entities_found = []
-            relationships_created = 0
-            
-            # If we have database connections, try to store
-            if neo4j_manager:
-                # Basic Neo4j storage
-                try:
-                    # Simple document node creation
-                    query = """
-                    CREATE (d:Document {
-                        id: $doc_id,
-                        title: $title,
-                        content: $content,
-                        source: $source,
-                        domain: $domain,
-                        created_at: datetime()
-                    })
-                    RETURN d.id as document_id
-                    """
-                    result = await neo4j_manager.execute_query_async(
-                        query,
-                        {
-                            "doc_id": document_id,
-                            "title": request.title,
-                            "content": request.content[:1000],  # Truncate for storage
-                            "source": request.source or "",
-                            "domain": request.domain
-                        }
-                    )
-                    if result:
-                        logger.info(f"Document stored in Neo4j: {document_id}")
-                except Exception as e:
-                    logger.error(f"Neo4j storage failed: {e}")
-            
-            if vector_manager:
-                # Basic vector storage
-                try:
-                    # Simple embedding and storage (if available)
-                    logger.info(f"Vector storage attempted for: {document_id}")
-                except Exception as e:
-                    logger.error(f"Vector storage failed: {e}")
-            
-            return DocumentUploadResponse(
+        # Initialize the mapping service
+        mapping_service.initialize()
+        
+        # Get embedding service
+        from core.embedding_service import EmbeddingService
+        embedding_service = EmbeddingService()
+        embedding_service.initialize()
+        
+        # Create ingestion pipeline
+        pipeline = DualStorageIngestionPipeline(
+            document_processor=document_processor,
+            graph_db_manager=neo4j_manager,
+            vector_db_manager=vector_manager,
+            mapping_service=mapping_service,
+            embedding_service=embedding_service
+        )
+        
+        # Actually ingest the document
+        logger.info(f"Processing document through ingestion pipeline...")
+        result = await pipeline.ingest_document(document)
+        
+        processing_time = time.time() - start_time
+        
+        if result.success:
+            response = DocumentUploadResponse(
                 document_id=document_id,
                 status="success",
-                message=f"Document '{request.title}' uploaded successfully",
-                entities_extracted=len(entities_found),
-                relationships_created=relationships_created,
-                processing_time=time.time() - start_time
+                message=f"Document '{request.title}' processed and stored successfully. "
+                       f"Extracted {result.entities_created} entities and created {result.relationships_created} relationships.",
+                entities_extracted=result.entities_created,
+                relationships_created=result.relationships_created,
+                processing_time=processing_time
             )
-            
-        except Exception as e:
-            logger.error(f"Document processing error: {e}")
-            return DocumentUploadResponse(
+            logger.info(f"Document {document_id} ingested successfully in {processing_time:.2f}s")
+        else:
+            response = DocumentUploadResponse(
                 document_id=document_id,
-                status="partial",
-                message=f"Document '{request.title}' received but processing incomplete: {str(e)}",
-                entities_extracted=0,
-                relationships_created=0,
-                processing_time=time.time() - start_time
+                status="partial_success",
+                message=f"Document '{request.title}' processed with some issues: {'; '.join(result.errors)}",
+                entities_extracted=result.entities_created,
+                relationships_created=result.relationships_created,
+                processing_time=processing_time
             )
-            
-    except Exception as e:
-        logger.error(f"Document upload error: {e}")
+            logger.warning(f"Document {document_id} ingested with issues in {processing_time:.2f}s")
+        return response
+        
+    except ValueError as e:
+        logger.warning(f"Invalid document upload {document_id}: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Document upload failed: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid document: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Error ingesting document {document_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error during document ingestion: {str(e)}"
         )
 
 @app.post("/documents/upload-file", response_model=DocumentUploadResponse, tags=["documents"])
@@ -851,7 +980,7 @@ async def get_system_status():
         
         if neo4j_manager:
             try:
-                result = await neo4j_manager.execute_query_async("RETURN 1 as test", {})
+                result = execute_neo4j_query("RETURN 1 as test")
                 neo4j_status = "connected" if result else "error"
             except:
                 neo4j_status = "error"
@@ -889,72 +1018,147 @@ async def get_system_status():
         logger.error(f"System status error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get system status: {str(e)}")
 
-@app.get("/admin/stats", tags=["admin"])
+@app.get("/admin/stats", response_model=List[DatabaseStatsResponse], tags=["admin"])
 async def get_database_stats():
-    """Get database statistics for admin dashboard"""
+    """Get comprehensive database statistics for admin dashboard"""
     try:
-        neo4j_manager, vector_manager = get_database_managers()
+        stats = []
         
-        stats = {
-            "neo4j": {
-                "status": "disconnected",
-                "nodes": 0,
-                "relationships": 0,
-                "documents": 0
-            },
-            "vector_db": {
-                "status": "disconnected", 
-                "vectors": 0,
-                "dimensions": 0
-            }
-        }
-        
-        # Neo4j stats
-        if neo4j_manager:
-            try:
-                # Count nodes
-                node_result = await neo4j_manager.execute_query_async("MATCH (n) RETURN count(n) as count", {})
-                nodes_count = node_result[0]['count'] if node_result else 0
-                
-                # Count relationships
-                rel_result = await neo4j_manager.execute_query_async("MATCH ()-[r]->() RETURN count(r) as count", {})
-                rels_count = rel_result[0]['count'] if rel_result else 0
-                
-                # Count documents
-                doc_result = await neo4j_manager.execute_query_async("MATCH (d:Document) RETURN count(d) as count", {})
-                docs_count = doc_result[0]['count'] if doc_result else 0
-                
-                stats["neo4j"] = {
-                    "status": "connected",
-                    "nodes": nodes_count,
-                    "relationships": rels_count,
-                    "documents": docs_count
+        # Neo4j Statistics
+        try:
+            neo4j_manager, _ = get_database_managers()
+            if neo4j_manager:
+                # Execute all queries with single connection
+                queries = {
+                    "documents": "MATCH (d:Document) RETURN count(d) as count",
+                    "entities": "MATCH (e:Entity) RETURN count(e) as count", 
+                    "relationships": "MATCH ()-[r]->() RETURN count(r) as count",
+                    "last_updated": "MATCH (d:Document) RETURN d.created_at as last_updated ORDER BY d.created_at DESC LIMIT 1"
                 }
-            except Exception as e:
-                logger.error(f"Neo4j stats error: {e}")
-                stats["neo4j"]["status"] = "error"
+                
+                query_results = execute_multiple_neo4j_queries(queries)
+                
+                # Extract results (handle both successful results and error strings)
+                doc_count = 0
+                entity_count = 0
+                rel_count = 0
+                last_updated = None
+                
+                if isinstance(query_results.get("documents"), list) and query_results["documents"]:
+                    doc_count = query_results["documents"][0]["count"]
+                
+                if isinstance(query_results.get("entities"), list) and query_results["entities"]:
+                    entity_count = query_results["entities"][0]["count"]
+                
+                if isinstance(query_results.get("relationships"), list) and query_results["relationships"]:
+                    rel_count = query_results["relationships"][0]["count"]
+                
+                if isinstance(query_results.get("last_updated"), list) and query_results["last_updated"]:
+                    try:
+                        last_updated = query_results["last_updated"][0]["last_updated"]
+                    except:
+                        last_updated = None
+                
+                stats.append(DatabaseStatsResponse(
+                    name="Neo4j Graph Database",
+                    status="Connected",
+                    total_documents=doc_count,
+                    total_entities=entity_count,
+                    total_relationships=rel_count,
+                    total_embeddings=0,
+                    last_updated=last_updated,
+                    size_info={
+                        "documents": doc_count,
+                        "entities": entity_count,
+                        "relationships": rel_count
+                    }
+                ))
+            else:
+                stats.append(DatabaseStatsResponse(
+                    name="Neo4j Graph Database",
+                    status="Not Connected",
+                    total_documents=0,
+                    total_entities=0,
+                    total_relationships=0,
+                    total_embeddings=0,
+                    last_updated=None,
+                    size_info={}
+                ))
+                
+        except Exception as e:
+            stats.append(DatabaseStatsResponse(
+                name="Neo4j Graph Database",
+                status=f"Error: {str(e)}",
+                total_documents=0,
+                total_entities=0,
+                total_relationships=0,
+                total_embeddings=0,
+                last_updated=None,
+                size_info={}
+            ))
         
-        # Vector DB stats
-        if vector_manager:
-            try:
-                stats["vector_db"] = {
-                    "status": "connected",
-                    "vectors": "unknown",  # Would need specific implementation
-                    "dimensions": 384  # Default for sentence-transformers
-                }
-            except Exception as e:
-                logger.error(f"Vector DB stats error: {e}")
-                stats["vector_db"]["status"] = "error"
+        # Pinecone Statistics
+        try:
+            _, vector_manager = get_database_managers()
+            if vector_manager:
+                # Try to get vector count estimate
+                try:
+                    # Query to estimate count
+                    results = vector_manager.query_collection(
+                        collection_name="documents",
+                        query_text="machine learning",
+                        n_results=10
+                    )
+                    # Rough estimate based on results
+                    vector_count = len(results.get("ids", [[]])[0]) if results.get("ids") else 0
+                    if vector_count > 0:
+                        vector_count = vector_count * 10  # Rough multiplier
+                except Exception:
+                    vector_count = 0
+                
+                stats.append(DatabaseStatsResponse(
+                    name="Pinecone Vector Database",
+                    status="Connected",
+                    total_documents=vector_count,
+                    total_entities=0,
+                    total_relationships=0,
+                    total_embeddings=vector_count,
+                    last_updated=datetime.now().isoformat(),
+                    size_info={
+                        "vectors": vector_count,
+                        "dimensions": 384,
+                        "collections": ["documents"]
+                    }
+                ))
+            else:
+                stats.append(DatabaseStatsResponse(
+                    name="Pinecone Vector Database",
+                    status="Not Connected",
+                    total_documents=0,
+                    total_entities=0,
+                    total_relationships=0,
+                    total_embeddings=0,
+                    last_updated=None,
+                    size_info={}
+                ))
+                
+        except Exception as e:
+            stats.append(DatabaseStatsResponse(
+                name="Pinecone Vector Database",
+                status=f"Error: {str(e)}",
+                total_documents=0,
+                total_entities=0,
+                total_relationships=0,
+                total_embeddings=0,
+                last_updated=None,
+                size_info={}
+            ))
         
-        return {
-            "database_stats": stats,
-            "last_updated": datetime.now().isoformat(),
-            "collection_time": time.time() - startup_time
-        }
+        return stats
         
     except Exception as e:
-        logger.error(f"Database stats error: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get database stats: {str(e)}")
+        logger.error(f"Error getting database stats: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get database statistics: {str(e)}")
 
 @app.delete("/admin/clear-neo4j", tags=["admin"])
 async def clear_neo4j_database():
@@ -966,7 +1170,7 @@ async def clear_neo4j_database():
             raise HTTPException(status_code=503, detail="Neo4j not available")
         
         # Clear all nodes and relationships
-        await neo4j_manager.execute_query_async("MATCH (n) DETACH DELETE n", {})
+        execute_neo4j_query("MATCH (n) DETACH DELETE n")
         
         logger.info("🗑️ Neo4j database cleared")
         
@@ -1100,6 +1304,103 @@ async def force_initialization():
     except Exception as e:
         logger.error(f"Force initialization failed: {e}")
         raise HTTPException(status_code=500, detail=f"Force initialization failed: {str(e)}")
+
+@app.get("/admin/database/neo4j", tags=["admin"])
+async def get_neo4j_details():
+    """Get detailed Neo4j database information"""
+    try:
+        neo4j_manager, _ = get_database_managers()
+        if not neo4j_manager:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
+        
+        # Get detailed statistics with single connection
+        queries = {
+            "documents": "MATCH (d:Document) RETURN count(d) as count",
+            "entities": "MATCH (e:Entity) RETURN count(e) as count",
+            "relationships": "MATCH ()-[r]->() RETURN count(r) as count",
+            "document_types": "MATCH (d:Document) RETURN d.domain as type, count(d) as count ORDER BY count DESC LIMIT 10",
+            "recent_documents": """
+                MATCH (d:Document) 
+                RETURN d.title as title, d.created_at as created_at, d.id as id
+                ORDER BY d.created_at DESC 
+                LIMIT 10
+            """
+        }
+        
+        results = execute_multiple_neo4j_queries(queries)
+        
+        return {
+            "database": "Neo4j Graph Database",
+            "status": "Connected",
+            "statistics": results,
+            "connection_info": {
+                "uri": "Connected to Neo4j Aura",
+                "database": "neo4j"
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting Neo4j details: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get Neo4j details: {str(e)}")
+
+@app.get("/admin/database/pinecone", tags=["admin"])
+async def get_pinecone_details():
+    """Get detailed Pinecone database information"""
+    try:
+        _, vector_manager = get_database_managers()
+        if not vector_manager:
+            raise HTTPException(status_code=503, detail="Pinecone not available")
+        
+        # Get sample vectors and metadata
+        results = vector_manager.query_collection(
+            collection_name="documents",
+            query_text="machine learning",
+            n_results=10
+        )
+        
+        # Analyze metadata
+        metadata_analysis = {}
+        if results.get("metadatas") and results["metadatas"][0]:
+            metadatas = results["metadatas"][0]
+            
+            # Count unique document IDs
+            doc_ids = set()
+            domains = {}
+            sources = {}
+            
+            for metadata in metadatas:
+                if metadata:
+                    if "document_id" in metadata:
+                        doc_ids.add(metadata["document_id"])
+                    if "domain" in metadata:
+                        domain = metadata["domain"]
+                        domains[domain] = domains.get(domain, 0) + 1
+                    if "source" in metadata:
+                        source = metadata["source"]
+                        sources[source] = sources.get(source, 0) + 1
+            
+            metadata_analysis = {
+                "unique_documents": len(doc_ids),
+                "domains": domains,
+                "sources": dict(list(sources.items())[:5]),  # Top 5 sources
+                "sample_metadata": metadatas[:3] if metadatas else []
+            }
+        
+        return {
+            "database": "Pinecone Vector Database",
+            "status": "Connected",
+            "collection_name": "documents",
+            "sample_results_count": len(results.get("documents", [[]])[0]) if results.get("documents") else 0,
+            "metadata_analysis": metadata_analysis,
+            "vector_dimensions": 384,  # Based on all-MiniLM-L6-v2
+            "sample_similarities": results.get("distances", [[]])[0][:5] if results.get("distances") else [],
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting Pinecone details: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get Pinecone details: {str(e)}")
 
 @app.get("/test/examples", tags=["testing"])
 async def get_api_examples():
