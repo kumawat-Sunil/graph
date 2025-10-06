@@ -2489,10 +2489,17 @@ async def get_pinecone_details():
 if __name__ == "__main__":
     import uvicorn
     
+       # Get configuration from environment (same as start_api.py)
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", 8000))
+    
+    print("🚀 Starting Graph-Enhanced Agentic RAG API...")
+    print(f"🌐 BINDING TO: {host}:{port}")
+    
     uvicorn.run(
         "api.main:app",
-        host=config.api.host,
-        port=config.api.port,
-        reload=config.api.reload,
-        log_level=config.log_level.lower()
+        host=host,
+        port=port,
+        reload=False,
+        log_level="info"
     )
