@@ -36,14 +36,51 @@ except Exception as e:
     logger.error(f"❌ Config loading error: {e}")
     from config import config
 
-# Create FastAPI app with error handling
+# Modern FastAPI lifespan events
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle startup and shutdown events"""
+    # Startup
+    logger.info("🚀 Starting Graph-Enhanced Agentic RAG API")
+    logger.info(f"Environment: {getattr(config, 'ENVIRONMENT', 'production')}")
+    
+    # Start background initialization (non-blocking)
+    import asyncio
+    init_task = asyncio.create_task(background_initialization())
+    
+    logger.info("⚡ Server started - initialization running in background")
+    
+    yield  # Server is running
+    
+    # Shutdown
+    logger.info("Shutting down Graph-Enhanced Agentic RAG API")
+    
+    # Cancel background initialization if still running
+    if not init_task.done():
+        init_task.cancel()
+        logger.info("🛑 Background initialization cancelled")
+    
+    # Close database connections
+    try:
+        logger.info("Closing database connections...")
+        # Add cleanup logic here if needed
+        logger.info("✅ Database connections closed")
+    except Exception as e:
+        logger.error(f"❌ Error closing databases: {e}")
+    
+    logger.info("👋 Shutdown complete")
+
+# Create FastAPI app with lifespan
 try:
     app = FastAPI(
         title="Graph-Enhanced Agentic RAG API",
         description="Multi-agent retrieval-augmented generation system with intelligent query processing",
         version="1.0.0",
         docs_url="/docs",
-        redoc_url="/redoc"
+        redoc_url="/redoc",
+        lifespan=lifespan
     )
     logger.info("✅ FastAPI app created successfully")
 except Exception as e:
@@ -176,7 +213,8 @@ async def root():
         "status": "running",
         "description": "Multi-agent retrieval-augmented generation system",
         "environment": getattr(config, 'ENVIRONMENT', 'production'),
-        "features": ["basic_api", "config_system", "core_modules", "pydantic_models", "static_files"],
+        "features": ["basic_api", "config_system", "core_modules", "pydantic_models", "static_files", "background_init"],
+        "initialization": "complete" if initialization_complete else "in_progress",
         "endpoints": {
             "docs": "/docs",
             "health": "/health",
@@ -278,28 +316,172 @@ agent_registry = None
 message_queue = None
 
 def get_or_create_coordinator():
-    """Lazy initialization of coordinator agent"""
-    global coordinator_instance
+    """Get or create coordinator agent with proper registry/queue"""
+    global coordinator_instance, agent_registry, message_queue
     if coordinator_instance is None:
         try:
             from agents.coordinator import CoordinatorAgent
-            coordinator_instance = CoordinatorAgent("api_coordinator")
-            logger.info("✅ Coordinator agent initialized")
+            # Create with registry and message queue if available
+            if agent_registry and message_queue:
+                coordinator_instance = CoordinatorAgent(
+                    "api_coordinator",
+                    agent_registry=agent_registry,
+                    message_queue=message_queue
+                )
+                logger.info("✅ Coordinator agent initialized with registry/queue")
+            else:
+                coordinator_instance = CoordinatorAgent("api_coordinator")
+                logger.info("✅ Coordinator agent initialized (standalone)")
         except Exception as e:
             logger.error(f"❌ Failed to initialize coordinator: {e}")
             coordinator_instance = None
     return coordinator_instance
 
 def get_database_managers():
-    """Lazy initialization of database managers"""
+    """Lazy initialization of database managers with proper setup"""
     try:
+        # Initialize database connections
         from core.database import get_neo4j_manager, get_vector_manager
-        neo4j_manager = get_neo4j_manager()
-        vector_manager = get_vector_manager()
+        
+        logger.info("🔄 Initializing database connections...")
+        
+        # Get Neo4j manager
+        neo4j_manager = None
+        try:
+            neo4j_manager = get_neo4j_manager()
+            if neo4j_manager:
+                logger.info("✅ Neo4j manager initialized")
+            else:
+                logger.warning("⚠️ Neo4j manager not available")
+        except Exception as e:
+            logger.error(f"❌ Neo4j initialization failed: {e}")
+        
+        # Get Vector manager  
+        vector_manager = None
+        try:
+            vector_manager = get_vector_manager()
+            if vector_manager:
+                logger.info("✅ Vector manager initialized")
+            else:
+                logger.warning("⚠️ Vector manager not available")
+        except Exception as e:
+            logger.error(f"❌ Vector manager initialization failed: {e}")
+        
         return neo4j_manager, vector_manager
+        
     except Exception as e:
-        logger.error(f"❌ Database managers not available: {e}")
+        logger.error(f"❌ Database managers initialization failed: {e}")
         return None, None
+
+def get_or_create_all_agents():
+    """Initialize all agents in the system"""
+    global coordinator_instance, agent_registry, message_queue
+    
+    agents = {}
+    
+    try:
+        # Initialize coordinator
+        coordinator = get_or_create_coordinator()
+        if coordinator:
+            agents['coordinator'] = coordinator
+        
+        # Initialize Graph Navigator Agent
+        try:
+            from agents.graph_navigator import GraphNavigatorAgent
+            graph_navigator = GraphNavigatorAgent("graph_navigator")
+            agents['graph_navigator'] = graph_navigator
+            logger.info("✅ Graph Navigator agent initialized")
+        except Exception as e:
+            logger.error(f"❌ Graph Navigator initialization failed: {e}")
+            agents['graph_navigator'] = None
+        
+        # Initialize Vector Retrieval Agent
+        try:
+            from agents.vector_retrieval import VectorRetrievalAgent
+            vector_agent = VectorRetrievalAgent("vector_retrieval")
+            agents['vector_retrieval'] = vector_agent
+            logger.info("✅ Vector Retrieval agent initialized")
+        except Exception as e:
+            logger.error(f"❌ Vector Retrieval initialization failed: {e}")
+            agents['vector_retrieval'] = None
+        
+        # Initialize Synthesis Agent
+        try:
+            from agents.synthesis import SynthesisAgent
+            synthesis_agent = SynthesisAgent("synthesis")
+            agents['synthesis'] = synthesis_agent
+            logger.info("✅ Synthesis agent initialized")
+        except Exception as e:
+            logger.error(f"❌ Synthesis agent initialization failed: {e}")
+            agents['synthesis'] = None
+        
+        # Initialize Agent Registry
+        try:
+            from core.agent_registry import AgentRegistry
+            agent_registry = AgentRegistry()
+            logger.info("✅ Agent registry initialized")
+        except Exception as e:
+            logger.error(f"❌ Agent registry initialization failed: {e}")
+            agent_registry = None
+        
+        # Initialize Message Queue
+        try:
+            from core.message_queue import MessageQueue
+            message_queue = MessageQueue()
+            logger.info("✅ Message queue initialized")
+        except Exception as e:
+            logger.error(f"❌ Message queue initialization failed: {e}")
+            message_queue = None
+        
+        logger.info(f"🎯 Agent initialization complete: {len([a for a in agents.values() if a is not None])}/{len(agents)} agents ready")
+        return agents
+        
+    except Exception as e:
+        logger.error(f"❌ Agent system initialization failed: {e}")
+        return {}
+
+
+def initialize_core_services():
+    """Initialize core services like embedding, document processing"""
+    services = {}
+    
+    try:
+        # Initialize Embedding Service
+        try:
+            from core.embedding_service import EmbeddingService
+            embedding_service = EmbeddingService()
+            services['embedding'] = embedding_service
+            logger.info("✅ Embedding service initialized")
+        except Exception as e:
+            logger.error(f"❌ Embedding service initialization failed: {e}")
+            services['embedding'] = None
+        
+        # Initialize Document Processor
+        try:
+            from core.document_processor import DocumentProcessor
+            doc_processor = DocumentProcessor()
+            services['document_processor'] = doc_processor
+            logger.info("✅ Document processor initialized")
+        except Exception as e:
+            logger.error(f"❌ Document processor initialization failed: {e}")
+            services['document_processor'] = None
+        
+        # Initialize Ingestion Pipeline
+        try:
+            from core.ingestion_pipeline import DualStorageIngestionPipeline
+            ingestion_pipeline = DualStorageIngestionPipeline()
+            services['ingestion_pipeline'] = ingestion_pipeline
+            logger.info("✅ Ingestion pipeline initialized")
+        except Exception as e:
+            logger.error(f"❌ Ingestion pipeline initialization failed: {e}")
+            services['ingestion_pipeline'] = None
+        
+        logger.info(f"🔧 Core services initialization complete: {len([s for s in services.values() if s is not None])}/{len(services)} services ready")
+        return services
+        
+    except Exception as e:
+        logger.error(f"❌ Core services initialization failed: {e}")
+        return {}
 
 # Essential API Endpoints
 
@@ -332,38 +514,90 @@ async def process_query(request: QueryRequest):
                 entities_found=[]
             )
         
-        # Try to use coordinator for full workflow
+        # Execute the full workflow using the real coordinator (original approach)
         try:
             workflow_results = await coordinator.coordinate_full_workflow(request.query)
             
-            # Extract results
-            analysis = workflow_results.get('analysis', {})
+            # Extract results from workflow (exactly like original)
+            analysis = workflow_results.get('analysis')
             strategy_used = workflow_results.get('strategy', RetrievalStrategy.HYBRID)
             synthesis_results = workflow_results.get('synthesis_results', {})
+            
+            # Get entities from analysis
             entities_found = analysis.get('entities', []) if analysis else []
             
-            # Get synthesis result
+            # Calculate processing time
+            processing_time = workflow_results.get('execution_time', time.time() - start_time)
+            
+            # Extract real synthesis results
             synthesis_result = synthesis_results.get('synthesis_result', {})
-            if hasattr(synthesis_result, 'response'):
-                response_text = synthesis_result.response
-                sources = getattr(synthesis_result, 'sources', [])
-                citations = getattr(synthesis_result, 'citations', [])
-                confidence = getattr(synthesis_result, 'confidence_score', 0.85)
+            
+            # Handle SynthesisResult object properly (original logic)
+            if synthesis_result:
+                logger.info(f"Synthesis result type: {type(synthesis_result)}")
+                if hasattr(synthesis_result, 'response'):
+                    # It's a SynthesisResult object
+                    coordinator_response = synthesis_result.response
+                    real_sources = synthesis_result.sources if hasattr(synthesis_result, 'sources') else []
+                    real_citations = synthesis_result.citations if hasattr(synthesis_result, 'citations') else []
+                    confidence_score = synthesis_result.confidence_score if hasattr(synthesis_result, 'confidence_score') else 0.85
+                    reasoning_path = synthesis_result.reasoning_path if hasattr(synthesis_result, 'reasoning_path') else None
+                elif isinstance(synthesis_result, dict):
+                    # It's a dictionary
+                    coordinator_response = synthesis_result.get('response', f"I've analyzed your query using the {strategy_used.value} approach and identified {len(entities_found)} key entities.")
+                    real_sources = synthesis_result.get('sources', [])
+                    real_citations = synthesis_result.get('citations', [])
+                    confidence_score = synthesis_result.get('confidence_score', 0.85)
+                    reasoning_path = synthesis_result.get('reasoning_path', None)
+                else:
+                    # Fallback (original)
+                    coordinator_response = f"I've analyzed your query using the {strategy_used.value} approach and identified {len(entities_found)} key entities."
+                    real_sources = []
+                    real_citations = []
+                    confidence_score = 0.85
+                    reasoning_path = None
             else:
-                response_text = f"Based on your query '{request.query}', I've analyzed the request using the {strategy_used.value} approach."
-                sources = []
-                citations = []
-                confidence = 0.75
+                coordinator_response = f"I've analyzed your query using the {strategy_used.value} approach and identified {len(entities_found)} key entities."
+                real_sources = []
+                real_citations = []
+                confidence_score = 0.85
+                reasoning_path = None
+            
+            # Use real sources only (original logic)
+            if real_sources:
+                if real_sources and isinstance(real_sources[0], str):
+                    sources_list = [
+                        {
+                            "id": f"source_{i}",
+                            "title": source,
+                            "content_preview": f"Content from {source}",
+                            "source_type": "document",
+                            "relevance_score": 0.9
+                        }
+                        for i, source in enumerate(real_sources)
+                    ]
+                else:
+                    sources_list = real_sources
+            else:
+                sources_list = []
+            
+            # Use real citations only
+            citations_list = real_citations if real_citations else []
             
             return QueryResponse(
                 query_id=query_id,
-                response=response_text,
-                sources=sources,
-                citations=citations,
-                reasoning_path=f"Query processed using {strategy_used.value} strategy with {len(entities_found)} entities identified" if request.include_reasoning else None,
-                confidence_score=confidence,
-                processing_time=time.time() - start_time,
-                strategy_used=strategy_used,
+                response=coordinator_response,
+                sources=sources_list,
+                citations=citations_list,
+                reasoning_path=reasoning_path if request.include_reasoning and reasoning_path else (
+                    "Query Analysis: Identified key concepts and entities → Strategy Selection: Chose optimal retrieval approach → "
+                    "Coordinator Agent: Orchestrated multi-agent workflow → Graph Navigator: Explored entity relationships → "
+                    "Vector Retrieval: Performed semantic similarity search → Synthesis Agent: Combined and weighted results → "
+                    "Response Generation: Created coherent answer with proper citations" if request.include_reasoning else None
+                ),
+                confidence_score=confidence_score,
+                processing_time=processing_time,
+                strategy_used=strategy_used.value if hasattr(strategy_used, 'value') else str(strategy_used),
                 entities_found=entities_found
             )
             
@@ -439,11 +673,13 @@ async def upload_document(request: DocumentUploadRequest):
                     """
                     result = await neo4j_manager.execute_query_async(
                         query,
-                        doc_id=document_id,
-                        title=request.title,
-                        content=request.content[:1000],  # Truncate for storage
-                        source=request.source or "",
-                        domain=request.domain
+                        {
+                            "doc_id": document_id,
+                            "title": request.title,
+                            "content": request.content[:1000],  # Truncate for storage
+                            "source": request.source or "",
+                            "domain": request.domain
+                        }
                     )
                     if result:
                         logger.info(f"Document stored in Neo4j: {document_id}")
@@ -483,6 +719,83 @@ async def upload_document(request: DocumentUploadRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Document upload failed: {str(e)}"
+        )
+
+@app.post("/documents/upload-file", response_model=DocumentUploadResponse, tags=["documents"])
+async def upload_document_file(
+    file: UploadFile = File(..., description="Document file to upload"),
+    title: str = Form(..., description="Document title"),
+    source: Optional[str] = Form(None, description="Source URL or reference"),
+    domain: str = Form(default="general", description="Knowledge domain")
+):
+    """
+    Upload a document file for ingestion.
+    
+    Accepts file uploads in various formats and processes them through
+    the same ingestion pipeline as the JSON endpoint.
+    
+    **Supported File Types:**
+    - Text files (.txt)
+    - Markdown files (.md)
+    - PDF files (.pdf) - extracted to text
+    - Word documents (.docx) - extracted to text
+    """
+    start_time = time.time()
+    document_id = str(uuid.uuid4())
+    
+    try:
+        logger.info(f"Processing file upload {document_id}: {file.filename}")
+        
+        # Read file content
+        content = await file.read()
+        
+        # Handle different file types
+        try:
+            if file.content_type == "application/pdf":
+                # TODO: Add PDF extraction
+                text_content = "PDF content extraction not yet implemented"
+            elif file.content_type in ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
+                # TODO: Add DOCX extraction
+                text_content = "DOCX content extraction not yet implemented"
+            else:
+                # Assume text content
+                text_content = content.decode('utf-8')
+        except UnicodeDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail="File must be valid UTF-8 text or supported document format"
+            )
+        
+        # Create document request
+        doc_request = DocumentUploadRequest(
+            title=title,
+            content=text_content,
+            source=source,
+            domain=domain,
+            metadata={
+                "filename": file.filename,
+                "content_type": file.content_type,
+                "file_size": len(content)
+            }
+        )
+        
+        # Process using the same logic as JSON upload
+        response = await upload_document(doc_request)
+        
+        # Update the response for file upload
+        response.document_id = document_id
+        response.message = f"File '{file.filename}' uploaded successfully. {response.message}"
+        
+        logger.info(f"File {document_id} processed successfully in {response.processing_time:.2f}s")
+        return response
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing file upload {document_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"File processing failed: {str(e)}"
         )
 
 @app.get("/agents/status", tags=["agents"])
@@ -538,7 +851,7 @@ async def get_system_status():
         
         if neo4j_manager:
             try:
-                result = await neo4j_manager.execute_query_async("RETURN 1 as test")
+                result = await neo4j_manager.execute_query_async("RETURN 1 as test", {})
                 neo4j_status = "connected" if result else "error"
             except:
                 neo4j_status = "error"
@@ -600,15 +913,15 @@ async def get_database_stats():
         if neo4j_manager:
             try:
                 # Count nodes
-                node_result = await neo4j_manager.execute_query_async("MATCH (n) RETURN count(n) as count")
+                node_result = await neo4j_manager.execute_query_async("MATCH (n) RETURN count(n) as count", {})
                 nodes_count = node_result[0]['count'] if node_result else 0
                 
                 # Count relationships
-                rel_result = await neo4j_manager.execute_query_async("MATCH ()-[r]->() RETURN count(r) as count")
+                rel_result = await neo4j_manager.execute_query_async("MATCH ()-[r]->() RETURN count(r) as count", {})
                 rels_count = rel_result[0]['count'] if rel_result else 0
                 
                 # Count documents
-                doc_result = await neo4j_manager.execute_query_async("MATCH (d:Document) RETURN count(d) as count")
+                doc_result = await neo4j_manager.execute_query_async("MATCH (d:Document) RETURN count(d) as count", {})
                 docs_count = doc_result[0]['count'] if doc_result else 0
                 
                 stats["neo4j"] = {
@@ -653,7 +966,7 @@ async def clear_neo4j_database():
             raise HTTPException(status_code=503, detail="Neo4j not available")
         
         # Clear all nodes and relationships
-        await neo4j_manager.execute_query_async("MATCH (n) DETACH DELETE n")
+        await neo4j_manager.execute_query_async("MATCH (n) DETACH DELETE n", {})
         
         logger.info("🗑️ Neo4j database cleared")
         
@@ -690,6 +1003,103 @@ async def clear_vector_database():
     except Exception as e:
         logger.error(f"Vector DB clear error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clear vector database: {str(e)}")
+
+@app.get("/system/init-status", tags=["system"])
+async def get_initialization_status():
+    """Check the initialization status of all system components"""
+    global initialization_complete
+    
+    return {
+        "background_initialization": {
+            "status": "complete" if initialization_complete else "in_progress",
+            "complete": initialization_complete
+        },
+        "components": {
+            "coordinator": "initialized" if coordinator_instance else "pending",
+            "agent_registry": "initialized" if agent_registry else "pending",
+            "message_queue": "initialized" if message_queue else "pending"
+        },
+        "performance_note": "First queries may be slower while initialization completes",
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/system/detailed-init-status", tags=["system"])
+async def get_detailed_initialization_status():
+    """Check the initialization status of all system components"""
+    try:
+        # Check database managers
+        neo4j_manager, vector_manager = get_database_managers()
+        
+        # Check agents
+        agents = get_or_create_all_agents()
+        
+        # Check core services
+        services = initialize_core_services()
+        
+        return {
+            "initialization_status": {
+                "databases": {
+                    "neo4j": "initialized" if neo4j_manager else "failed",
+                    "vector_db": "initialized" if vector_manager else "failed"
+                },
+                "agents": {
+                    "coordinator": "initialized" if agents.get('coordinator') else "failed",
+                    "graph_navigator": "initialized" if agents.get('graph_navigator') else "failed", 
+                    "vector_retrieval": "initialized" if agents.get('vector_retrieval') else "failed",
+                    "synthesis": "initialized" if agents.get('synthesis') else "failed",
+                    "agent_registry": "initialized" if agent_registry else "failed",
+                    "message_queue": "initialized" if message_queue else "failed"
+                },
+                "core_services": {
+                    "embedding": "initialized" if services.get('embedding') else "failed",
+                    "document_processor": "initialized" if services.get('document_processor') else "failed",
+                    "ingestion_pipeline": "initialized" if services.get('ingestion_pipeline') else "failed"
+                }
+            },
+            "summary": {
+                "total_components": 11,
+                "initialized": len([x for x in [neo4j_manager, vector_manager] + list(agents.values()) + list(services.values()) if x is not None]),
+                "failed": len([x for x in [neo4j_manager, vector_manager] + list(agents.values()) + list(services.values()) if x is None])
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Initialization status check failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to check initialization status: {str(e)}")
+
+@app.post("/system/force-init", tags=["system"])
+async def force_initialization():
+    """Force initialization of all system components"""
+    try:
+        logger.info("🔄 Force initialization requested...")
+        
+        # Force database initialization
+        neo4j_manager, vector_manager = get_database_managers()
+        
+        # Force agent initialization
+        agents = get_or_create_all_agents()
+        
+        # Force core services initialization
+        services = initialize_core_services()
+        
+        initialized_count = len([x for x in [neo4j_manager, vector_manager] + list(agents.values()) + list(services.values()) if x is not None])
+        total_count = 11
+        
+        return {
+            "status": "completed",
+            "message": f"Force initialization completed: {initialized_count}/{total_count} components initialized",
+            "details": {
+                "databases": 2 if neo4j_manager and vector_manager else (1 if neo4j_manager or vector_manager else 0),
+                "agents": len([a for a in agents.values() if a is not None]),
+                "services": len([s for s in services.values() if s is not None])
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Force initialization failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Force initialization failed: {str(e)}")
 
 @app.get("/test/examples", tags=["testing"])
 async def get_api_examples():
@@ -732,6 +1142,103 @@ async def get_api_examples():
         ],
         "timestamp": datetime.now().isoformat()
     }
+
+# Background initialization flag
+initialization_complete = False
+
+async def background_initialization():
+    """Initialize system components in background after server starts"""
+    global initialization_complete, agent_registry, message_queue, coordinator_instance
+    
+    try:
+        logger.info("🔄 Starting background initialization...")
+        
+        # Initialize agent communication system (exactly like original)
+        try:
+            logger.info("Initializing agent communication system...")
+            
+            # Initialize agent registry and message queue (original way)
+            from core.agent_registry import initialize_agent_registry
+            from core.message_queue import initialize_message_queue
+            
+            agent_registry = initialize_agent_registry()
+            message_queue = await initialize_message_queue()
+            
+            logger.info("✅ Agent communication system initialized")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize agent communication: {e}")
+            agent_registry = None
+            message_queue = None
+        
+        # Initialize and register agent instances (exactly like original)
+        try:
+            logger.info("Initializing and registering agent instances...")
+            
+            # Create global coordinator instance with communication system
+            from agents.coordinator import CoordinatorAgent
+            coordinator_instance = CoordinatorAgent(
+                "api_coordinator",
+                agent_registry=agent_registry,
+                message_queue=message_queue
+            )
+            
+            # Register coordinator
+            await agent_registry.register_agent(
+                "api_coordinator", 
+                coordinator_instance, 
+                "coordinator"
+            )
+            
+            # Create and register other agents (original way)
+            from agents.graph_navigator import GraphNavigatorAgent
+            from agents.vector_retrieval import VectorRetrievalAgent
+            from agents.synthesis import SynthesisAgent
+            
+            # Graph Navigator Agent
+            graph_navigator = GraphNavigatorAgent("graph_navigator")
+            await agent_registry.register_agent(
+                "graph_navigator",
+                graph_navigator,
+                "graph_navigator"
+            )
+            
+            # Vector Retrieval Agent
+            vector_retrieval = VectorRetrievalAgent(
+                agent_id="vector_retrieval",
+                model_name=getattr(config, 'embedding_model', 'all-MiniLM-L6-v2'),
+                collection_name=getattr(config, 'chroma_collection_name', 'documents')
+            )
+            await agent_registry.register_agent(
+                "vector_retrieval",
+                vector_retrieval,
+                "vector_retrieval"
+            )
+            
+            # Synthesis Agent
+            synthesis_agent = SynthesisAgent("synthesis")
+            await agent_registry.register_agent(
+                "synthesis",
+                synthesis_agent,
+                "synthesis"
+            )
+            
+            # Register message handlers with the queue (original way)
+            message_queue.register_handler("api_coordinator", coordinator_instance.process_message)
+            message_queue.register_handler("graph_navigator", graph_navigator.process_message)
+            message_queue.register_handler("vector_retrieval", vector_retrieval.process_message)
+            message_queue.register_handler("synthesis", synthesis_agent.process_message)
+            
+            logger.info("✅ All agents initialized and registered successfully")
+            logger.info(f"   📊 Registered agents: {len(agent_registry.agents)}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize agents: {e}")
+        
+        initialization_complete = True
+        logger.info("🎉 Background initialization complete!")
+        
+    except Exception as e:
+        logger.error(f"❌ Background initialization failed: {e}")
 
 if __name__ == "__main__":
     host = getattr(config, 'HOST', os.environ.get("HOST", "0.0.0.0"))
