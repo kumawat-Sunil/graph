@@ -1,11 +1,31 @@
 """
-RAG API - Gradually building up features
+Graph-Enhanced Agentic RAG API
+Main FastAPI application
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, List
+import logging
+import time
+import uuid
+from datetime import datetime
 import os
 import uvicorn
-from config import config
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Try to import core modules, fallback to simple config if not available
+try:
+    from core.config import get_config
+    config = get_config()
+except ImportError:
+    # Fallback to simple config
+    from config import config
 
 # Create FastAPI app
 app = FastAPI(
@@ -30,8 +50,8 @@ async def root():
         "message": "RAG API is running!",
         "status": "healthy",
         "version": "1.0.0",
-        "environment": config.ENVIRONMENT,
-        "features": ["basic_api", "config_system"]
+        "environment": getattr(config, 'ENVIRONMENT', 'production'),
+        "features": ["basic_api", "config_system", "core_modules"]
     }
 
 @app.get("/health")
@@ -40,11 +60,11 @@ async def health():
     return {
         "status": "healthy",
         "message": "API is working perfectly",
-        "environment": config.ENVIRONMENT,
+        "environment": getattr(config, 'ENVIRONMENT', 'production'),
         "config_loaded": True,
         "databases": {
-            "neo4j": "configured" if config.NEO4J_URI else "not_configured",
-            "pinecone": "configured" if config.PINECONE_API_KEY else "not_configured"
+            "neo4j": "configured" if getattr(config, 'NEO4J_URI', None) else "not_configured",
+            "pinecone": "configured" if getattr(config, 'PINECONE_API_KEY', None) else "not_configured"
         }
     }
 
@@ -57,13 +77,16 @@ async def test_endpoint(data: dict):
     }
 
 if __name__ == "__main__":
-    print(f"🚀 Starting RAG API on {config.HOST}:{config.PORT}")
-    print(f"🔧 Environment: {config.ENVIRONMENT}")
+    host = getattr(config, 'HOST', os.environ.get("HOST", "0.0.0.0"))
+    port = getattr(config, 'PORT', int(os.environ.get("PORT", 8000)))
+    
+    print(f"🚀 Starting RAG API on {host}:{port}")
+    print(f"🔧 Environment: {getattr(config, 'ENVIRONMENT', 'production')}")
     
     uvicorn.run(
         "main:app",
-        host=config.HOST,
-        port=config.PORT,
+        host=host,
+        port=port,
         reload=False,
         log_level="info"
     )

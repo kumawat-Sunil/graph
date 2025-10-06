@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Guide - Graph-Enhanced Agentic RAG</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .guide-nav {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            position: sticky;
+            top: 20px;
+            z-index: 100;
+        }
+        
+        .guide-nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .guide-nav a {
+            color: #667eea;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .guide-nav a:hover {
+            background: rgba(102, 126, 234, 0.1);
+            transform: translateY(-1px);
+        }
+        
+        .guide-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        .guide-section h2 {
+            color: #4a5568;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .guide-section h3 {
+            color: #667eea;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+        
+        .example-box {
+            background: #f7fafc;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .tip-box {
+            background: #f0fff4;
+            border-left: 4px solid #48bb78;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .warning-box {
+            background: #fffaf0;
+            border-left: 4px solid #ed8936;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .feature-card {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .feature-card h4 {
+            color: #4a5568;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .back-to-top {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .back-to-top:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+        }
+        
+        .back-to-top.show {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-book"></i> User Guide</h1>
+                <p>Complete guide to using the Graph-Enhanced Agentic RAG System</p>
+            </div>
+            <a href="/static/index.html" class="nav-btn">
+                <i class="fas fa-arrow-left"></i> Back to Main
+            </a>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="guide-nav">
+            <ul>
+                <li><a href="#getting-started"><i class="fas fa-play"></i> Getting Started</a></li>
+                <li><a href="#asking-questions"><i class="fas fa-question"></i> Asking Questions</a></li>
+                <li><a href="#understanding-results"><i class="fas fa-lightbulb"></i> Understanding Results</a></li>
+                <li><a href="#uploading-documents"><i class="fas fa-upload"></i> Uploading Documents</a></li>
+                <li><a href="#advanced-tips"><i class="fas fa-star"></i> Advanced Tips</a></li>
+                <li><a href="#troubleshooting"><i class="fas fa-wrench"></i> Troubleshooting</a></li>
+            </ul>
+        </nav>
+
+        <!-- Getting Started -->
+        <section id="getting-started" class="guide-section">
+            <h2><i class="fas fa-play"></i> Getting Started</h2>
+            
+            <h3>What is Graph-Enhanced Agentic RAG?</h3>
+            <p>Our system is an advanced AI-powered knowledge discovery platform that combines:</p>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4><i class="fas fa-brain"></i> Intelligent Understanding</h4>
+                    <p>Uses AI agents to understand your questions and find the best way to answer them</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-project-diagram"></i> Relationship Discovery</h4>
+                    <p>Explores connections between concepts using knowledge graphs</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-search"></i> Semantic Search</h4>
+                    <p>Finds relevant information using advanced text understanding</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-magic"></i> Smart Synthesis</h4>
+                    <p>Combines information from multiple sources to give comprehensive answers</p>
+                </div>
+            </div>
+
+            <h3>Key Benefits</h3>
+            <ul>
+                <li><strong>Accurate Answers:</strong> Get precise, well-sourced responses to complex questions</li>
+                <li><strong>Deep Insights:</strong> Discover relationships and connections you might miss</li>
+                <li><strong>Transparent Sources:</strong> See exactly where information comes from</li>
+                <li><strong>Fast Results:</strong> Get answers in seconds, not hours of research</li>
+            </ul>
+        </section>
+
+        <!-- Asking Questions -->
+        <section id="asking-questions" class="guide-section">
+            <h2><i class="fas fa-question"></i> How to Ask Questions</h2>
+            
+            <h3>Question Types We Excel At</h3>
+            
+            <h4>1. Factual Questions</h4>
+            <p>Perfect for getting definitions and basic information.</p>
+            <div class="example-box">
+                <strong>Examples:</strong>
+                <ul>
+                    <li>"What is machine learning?"</li>
+                    <li>"Define neural networks"</li>
+                    <li>"Explain the transformer architecture"</li>
+                </ul>
+            </div>
+
+            <h4>2. Relationship Questions</h4>
+            <p>Great for understanding how concepts connect.</p>
+            <div class="example-box">
+                <strong>Examples:</strong>
+                <ul>
+                    <li>"How are neural networks related to deep learning?"</li>
+                    <li>"What's the connection between AI and robotics?"</li>
+                    <li>"How does reinforcement learning relate to game theory?"</li>
+                </ul>
+            </div>
+
+            <h4>3. Complex Multi-Part Questions</h4>
+            <p>Ideal for comprehensive analysis requiring multiple reasoning steps.</p>
+            <div class="example-box">
+                <strong>Examples:</strong>
+                <ul>
+                    <li>"What are the applications of reinforcement learning in robotics and how do they relate to computer vision?"</li>
+                    <li>"How has the transformer architecture influenced both NLP and computer vision?"</li>
+                </ul>
+            </div>
+
+            <h3>Tips for Better Questions</h3>
+            
+            <div class="tip-box">
+                <h4><i class="fas fa-check"></i> Do This:</h4>
+                <ul>
+                    <li><strong>Be specific:</strong> "How does BERT differ from GPT?" vs "Tell me about language models"</li>
+                    <li><strong>Use natural language:</strong> Write as you would speak to a knowledgeable colleague</li>
+                    <li><strong>Ask about relationships:</strong> Use phrases like "related to", "connected with", "compared to"</li>
+                    <li><strong>Build on previous questions:</strong> Follow up with deeper inquiries</li>
+                </ul>
+            </div>
+
+            <div class="warning-box">
+                <h4><i class="fas fa-times"></i> Avoid This:</h4>
+                <ul>
+                    <li><strong>Overly broad questions:</strong> "Tell me everything about AI"</li>
+                    <li><strong>Yes/no questions:</strong> "Is machine learning good?"</li>
+                    <li><strong>Ambiguous terms:</strong> Be specific about which "model" or "system" you mean</li>
+                    <li><strong>Multiple unrelated questions:</strong> Ask one focused question at a time</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Understanding Results -->
+        <section id="understanding-results" class="guide-section">
+            <h2><i class="fas fa-lightbulb"></i> Understanding Your Results</h2>
+            
+            <h3>Response Components</h3>
+            
+            <h4>1. Main Answer</h4>
+            <p>The primary response synthesized from multiple sources.</p>
+            <ul>
+                <li><strong>Clear and comprehensive:</strong> Combines information from various sources</li>
+                <li><strong>Well-structured:</strong> Organized with logical flow</li>
+                <li><strong>Contextual:</strong> Tailored to your specific question</li>
+            </ul>
+
+            <h4>2. Sources</h4>
+            <p>The documents and entities used to generate the answer.</p>
+            <ul>
+                <li><strong>Document Sources:</strong> Specific documents with relevance scores</li>
+                <li><strong>Graph Entities:</strong> Concepts and entities from the knowledge graph</li>
+                <li><strong>Relevance Scores:</strong> How closely each source matches your question (0.0-1.0)</li>
+            </ul>
+
+            <h4>3. Citations</h4>
+            <p>Formal references you can use for further research.</p>
+
+            <h4>4. Reasoning Path</h4>
+            <p>Explanation of how the system processed your question.</p>
+
+            <h4>5. Confidence Score</h4>
+            <p>How confident the system is in its answer (0.0-1.0).</p>
+            
+            <div class="tip-box">
+                <h4>Quality Indicators:</h4>
+                <ul>
+                    <li><strong>0.8-1.0:</strong> High confidence - comprehensive, well-supported answer</li>
+                    <li><strong>0.6-0.8:</strong> Good confidence - reliable answer with good sources</li>
+                    <li><strong>0.4-0.6:</strong> Moderate confidence - partial answer, may need more context</li>
+                    <li><strong>0.0-0.4:</strong> Low confidence - limited information available</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Uploading Documents -->
+        <section id="uploading-documents" class="guide-section">
+            <h2><i class="fas fa-upload"></i> Adding Your Own Documents</h2>
+            
+            <h3>Why Upload Documents?</h3>
+            <ul>
+                <li><strong>Personalized Knowledge:</strong> Get answers specific to your domain or organization</li>
+                <li><strong>Comprehensive Coverage:</strong> Ensure important information is included</li>
+                <li><strong>Better Context:</strong> Improve answer quality with relevant background material</li>
+                <li><strong>Custom Insights:</strong> Discover connections within your own content</li>
+            </ul>
+
+            <h3>Supported File Types</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4><i class="fas fa-file-alt"></i> Text Files</h4>
+                    <p>.txt, .md (Markdown)</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-file-pdf"></i> PDF Documents</h4>
+                    <p>.pdf files</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-globe"></i> Web Content</h4>
+                    <p>.html files</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-code"></i> Structured Data</h4>
+                    <p>.json, .xml (limited support)</p>
+                </div>
+            </div>
+
+            <h3>Upload Best Practices</h3>
+            
+            <div class="tip-box">
+                <h4><i class="fas fa-check"></i> For Best Results:</h4>
+                <ul>
+                    <li><strong>Provide clear titles:</strong> Helps with entity extraction and organization</li>
+                    <li><strong>Choose appropriate domains:</strong> Improves processing accuracy</li>
+                    <li><strong>Upload related documents:</strong> Creates richer knowledge connections</li>
+                    <li><strong>Include metadata:</strong> Author, date, keywords help with context</li>
+                    <li><strong>Use high-quality sources:</strong> Better input = better output</li>
+                </ul>
+            </div>
+
+            <h3>What Happens During Processing?</h3>
+            <ol>
+                <li><strong>Text Extraction:</strong> Content is extracted and cleaned</li>
+                <li><strong>Chunking:</strong> Document is split into manageable sections</li>
+                <li><strong>Entity Extraction:</strong> Key concepts and entities are identified</li>
+                <li><strong>Relationship Discovery:</strong> Connections between entities are found</li>
+                <li><strong>Graph Storage:</strong> Entities and relationships are added to the knowledge graph</li>
+                <li><strong>Vector Storage:</strong> Text chunks are converted to embeddings for semantic search</li>
+                <li><strong>Mapping Creation:</strong> Links between graph and vector representations are established</li>
+            </ol>
+        </section>
+
+        <!-- Advanced Tips -->
+        <section id="advanced-tips" class="guide-section">
+            <h2><i class="fas fa-star"></i> Advanced Usage Tips</h2>
+            
+            <h3>Getting Better Answers</h3>
+            
+            <h4>1. Progressive Questioning</h4>
+            <p>Start broad, then get specific:</p>
+            <div class="example-box">
+                <ol>
+                    <li>"What is reinforcement learning?"</li>
+                    <li>"How is reinforcement learning used in robotics?"</li>
+                    <li>"What are the challenges of applying reinforcement learning to robotic manipulation tasks?"</li>
+                </ol>
+            </div>
+
+            <h4>2. Context Building</h4>
+            <p>Reference previous concepts:</p>
+            <div class="example-box">
+                <ul>
+                    <li>"Building on the transformer architecture we discussed, how does BERT differ from GPT?"</li>
+                    <li>"Given the relationship between neural networks and deep learning, how do CNNs fit into this picture?"</li>
+                </ul>
+            </div>
+
+            <h4>3. Comparative Analysis</h4>
+            <p>Ask for comparisons:</p>
+            <div class="example-box">
+                <ul>
+                    <li>"Compare supervised and unsupervised learning approaches"</li>
+                    <li>"What are the trade-offs between accuracy and interpretability in machine learning models?"</li>
+                </ul>
+            </div>
+
+            <h3>Understanding System Behavior</h3>
+            
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4><i class="fas fa-vector-square"></i> Vector-Focused</h4>
+                    <p><strong>When used:</strong> Simple factual questions, definitions</p>
+                    <p><strong>Best for:</strong> "What is...", "Define...", "Explain..."</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-project-diagram"></i> Graph-Focused</h4>
+                    <p><strong>When used:</strong> Questions about connections and relationships</p>
+                    <p><strong>Best for:</strong> "How are X and Y related?", "What connects..."</p>
+                </div>
+                <div class="feature-card">
+                    <h4><i class="fas fa-puzzle-piece"></i> Hybrid</h4>
+                    <p><strong>When used:</strong> Complex, multi-part questions</p>
+                    <p><strong>Best for:</strong> Complex analysis, research-style questions</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Troubleshooting -->
+        <section id="troubleshooting" class="guide-section">
+            <h2><i class="fas fa-wrench"></i> Troubleshooting</h2>
+            
+            <h3>Common Issues and Solutions</h3>
+            
+            <h4>"I'm not getting relevant results"</h4>
+            <div class="warning-box">
+                <strong>Possible causes:</strong>
+                <ul>
+                    <li>Question too broad or vague</li>
+                    <li>Relevant documents not uploaded</li>
+                    <li>Technical terms not recognized</li>
+                </ul>
+                <strong>Solutions:</strong>
+                <ul>
+                    <li>✅ Be more specific in your question</li>
+                    <li>✅ Upload relevant documents to your domain</li>
+                    <li>✅ Try alternative phrasings</li>
+                    <li>✅ Break complex questions into parts</li>
+                </ul>
+            </div>
+
+            <h4>"The confidence score is low"</h4>
+            <div class="warning-box">
+                <strong>Possible causes:</strong>
+                <ul>
+                    <li>Limited information in knowledge base</li>
+                    <li>Question outside system's domain</li>
+                    <li>Ambiguous or unclear question</li>
+                </ul>
+                <strong>Solutions:</strong>
+                <ul>
+                    <li>✅ Upload more relevant documents</li>
+                    <li>✅ Rephrase your question more clearly</li>
+                    <li>✅ Ask for specific aspects rather than general overviews</li>
+                </ul>
+            </div>
+
+            <h4>"The system seems slow"</h4>
+            <div class="warning-box">
+                <strong>Possible causes:</strong>
+                <ul>
+                    <li>Complex question requiring extensive processing</li>
+                    <li>High system load</li>
+                    <li>Large knowledge base</li>
+                </ul>
+                <strong>Solutions:</strong>
+                <ul>
+                    <li>✅ Check system health indicator</li>
+                    <li>✅ Try simpler questions first</li>
+                    <li>✅ Break complex questions into parts</li>
+                </ul>
+            </div>
+
+            <h3>Getting Help</h3>
+            <ul>
+                <li><strong>System Status:</strong> Check the health indicator in the top-right corner</li>
+                <li><strong>Question Optimization:</strong> Start with simple questions and gradually increase complexity</li>
+                <li><strong>Document Issues:</strong> Verify file format is supported and upload completed successfully</li>
+            </ul>
+        </section>
+
+        <!-- Back to Top Button -->
+        <button class="back-to-top" id="backToTop" onclick="scrollToTop()">
+            <i class="fas fa-arrow-up"></i>
+        </button>
+    </div>
+
+    <script>
+        // Show/hide sections
+        function showSection(sectionId) {
+            // Update navigation
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Show section
+            document.querySelectorAll('.admin-section').forEach(section => section.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+        }
+
+        // Back to top functionality
+        window.addEventListener('scroll', function() {
+            const backToTop = document.getElementById('backToTop');
+            if (window.pageYOffset > 300) {
+                backToTop.classList.add('show');
+            } else {
+                backToTop.classList.remove('show');
+            }
+        });
+
+        function scrollToTop() {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        }
+
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
