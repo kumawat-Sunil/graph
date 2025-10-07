@@ -234,13 +234,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Hugging Face** for Sentence Transformers
 - **FastAPI** for the excellent web framework
 
-## 📞 Support
-
-For questions, issues, or contributions:
-- 📧 Email: [Your Email]
-- 🐛 Issues: [GitHub Issues](https://github.com/Sunilk240/graph-enhanced-rag/issues)
-- 💬 Discussions: [GitHub Discussions](https://github.com/Sunilk240/graph-enhanced-rag/discussions)
-
 ---
 
 **Built with ❤️ for intelligent document processing and knowledge retrieval**
