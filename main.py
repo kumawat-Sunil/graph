@@ -41,36 +41,26 @@ from contextlib import asynccontextmanager, contextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Handle startup and shutdown events"""
-    # Startup
+    """Handle startup and shutdown events - MINIMAL startup for fast port detection"""
+    # Startup - MINIMAL ONLY
     logger.info("🚀 Starting Graph-Enhanced Agentic RAG API")
     logger.info(f"Environment: {getattr(config, 'ENVIRONMENT', 'production')}")
-    
-    # Start background initialization (non-blocking)
-    import asyncio
-    init_task = asyncio.create_task(background_initialization())
-    
-    logger.info("⚡ Server started - initialization running in background")
+    logger.info("⚡ Server started - components will initialize on-demand")
     
     yield  # Server is running
     
     # Shutdown
     logger.info("Shutting down Graph-Enhanced Agentic RAG API")
     
-    # Cancel background initialization if still running
-    if not init_task.done():
-        init_task.cancel()
-        logger.info("🛑 Background initialization cancelled")
-    
-    # Close database connections
+    # Close database connections if they were initialized
     try:
-        logger.info("Closing database connections...")
-        # Add cleanup logic here if needed
+        if neo4j_manager_instance:
+            neo4j_manager_instance.disconnect()
         logger.info("✅ Database connections closed")
     except Exception as e:
         logger.error(f"❌ Error closing databases: {e}")
     
-    logger.info("👋 Shutdown complete")
+    logger.info("� ShutBdown complete")
 
 # Create FastAPI app with lifespan
 try:
@@ -247,7 +237,7 @@ async def root():
         "description": "Multi-agent retrieval-augmented generation system",
         "environment": getattr(config, 'ENVIRONMENT', 'production'),
         "features": ["basic_api", "config_system", "core_modules", "pydantic_models", "static_files", "background_init"],
-        "initialization": "complete" if initialization_complete else "in_progress",
+        "initialization": "lazy_on_demand",
         "endpoints": {
             "docs": "/docs",
             "health": "/health",
@@ -350,27 +340,7 @@ message_queue = None
 neo4j_manager_instance = None
 vector_manager_instance = None
 
-def get_or_create_coordinator():
-    """Get or create coordinator agent with proper registry/queue"""
-    global coordinator_instance, agent_registry, message_queue
-    if coordinator_instance is None:
-        try:
-            from agents.coordinator import CoordinatorAgent
-            # Create with registry and message queue if available
-            if agent_registry and message_queue:
-                coordinator_instance = CoordinatorAgent(
-                    "api_coordinator",
-                    agent_registry=agent_registry,
-                    message_queue=message_queue
-                )
-                logger.info("✅ Coordinator agent initialized with registry/queue")
-            else:
-                coordinator_instance = CoordinatorAgent("api_coordinator")
-                logger.info("✅ Coordinator agent initialized (standalone)")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize coordinator: {e}")
-            coordinator_instance = None
-    return coordinator_instance
+# Removed get_or_create_coordinator - using lazy initialization instead
 
 def get_database_managers():
     """Get or initialize database managers (singleton pattern)"""
@@ -447,115 +417,10 @@ def execute_multiple_neo4j_queries(queries: dict):
                 results[key] = f"Error: {str(e)}"
     return results
 
-def get_or_create_all_agents():
-    """Initialize all agents in the system"""
-    global coordinator_instance, agent_registry, message_queue
-    
-    agents = {}
-    
-    try:
-        # Initialize coordinator
-        coordinator = get_or_create_coordinator()
-        if coordinator:
-            agents['coordinator'] = coordinator
-        
-        # Initialize Graph Navigator Agent
-        try:
-            from agents.graph_navigator import GraphNavigatorAgent
-            graph_navigator = GraphNavigatorAgent("graph_navigator")
-            agents['graph_navigator'] = graph_navigator
-            logger.info("✅ Graph Navigator agent initialized")
-        except Exception as e:
-            logger.error(f"❌ Graph Navigator initialization failed: {e}")
-            agents['graph_navigator'] = None
-        
-        # Initialize Vector Retrieval Agent
-        try:
-            from agents.vector_retrieval import VectorRetrievalAgent
-            vector_agent = VectorRetrievalAgent("vector_retrieval")
-            agents['vector_retrieval'] = vector_agent
-            logger.info("✅ Vector Retrieval agent initialized")
-        except Exception as e:
-            logger.error(f"❌ Vector Retrieval initialization failed: {e}")
-            agents['vector_retrieval'] = None
-        
-        # Initialize Synthesis Agent
-        try:
-            from agents.synthesis import SynthesisAgent
-            synthesis_agent = SynthesisAgent("synthesis")
-            agents['synthesis'] = synthesis_agent
-            logger.info("✅ Synthesis agent initialized")
-        except Exception as e:
-            logger.error(f"❌ Synthesis agent initialization failed: {e}")
-            agents['synthesis'] = None
-        
-        # Initialize Agent Registry
-        try:
-            from core.agent_registry import AgentRegistry
-            agent_registry = AgentRegistry()
-            logger.info("✅ Agent registry initialized")
-        except Exception as e:
-            logger.error(f"❌ Agent registry initialization failed: {e}")
-            agent_registry = None
-        
-        # Initialize Message Queue
-        try:
-            from core.message_queue import MessageQueue
-            message_queue = MessageQueue()
-            logger.info("✅ Message queue initialized")
-        except Exception as e:
-            logger.error(f"❌ Message queue initialization failed: {e}")
-            message_queue = None
-        
-        logger.info(f"🎯 Agent initialization complete: {len([a for a in agents.values() if a is not None])}/{len(agents)} agents ready")
-        return agents
-        
-    except Exception as e:
-        logger.error(f"❌ Agent system initialization failed: {e}")
-        return {}
+# Removed get_or_create_all_agents - using lazy initialization instead
 
 
-def initialize_core_services():
-    """Initialize core services like embedding, document processing"""
-    services = {}
-    
-    try:
-        # Initialize Embedding Service
-        try:
-            from core.embedding_service import EmbeddingService
-            embedding_service = EmbeddingService()
-            services['embedding'] = embedding_service
-            logger.info("✅ Embedding service initialized")
-        except Exception as e:
-            logger.error(f"❌ Embedding service initialization failed: {e}")
-            services['embedding'] = None
-        
-        # Initialize Document Processor
-        try:
-            from core.document_processor import DocumentProcessor
-            doc_processor = DocumentProcessor()
-            services['document_processor'] = doc_processor
-            logger.info("✅ Document processor initialized")
-        except Exception as e:
-            logger.error(f"❌ Document processor initialization failed: {e}")
-            services['document_processor'] = None
-        
-        # Initialize Ingestion Pipeline
-        try:
-            from core.ingestion_pipeline import DualStorageIngestionPipeline
-            ingestion_pipeline = DualStorageIngestionPipeline()
-            services['ingestion_pipeline'] = ingestion_pipeline
-            logger.info("✅ Ingestion pipeline initialized")
-        except Exception as e:
-            logger.error(f"❌ Ingestion pipeline initialization failed: {e}")
-            services['ingestion_pipeline'] = None
-        
-        logger.info(f"🔧 Core services initialization complete: {len([s for s in services.values() if s is not None])}/{len(services)} services ready")
-        return services
-        
-    except Exception as e:
-        logger.error(f"❌ Core services initialization failed: {e}")
-        return {}
+# Removed initialize_core_services - services initialize on-demand through their own modules
 
 # Essential API Endpoints
 
@@ -571,10 +436,10 @@ async def process_query(request: QueryRequest):
     try:
         logger.info(f"Processing query {query_id}: {request.query}")
         
-        # Lazy load coordinator
-        coordinator = get_or_create_coordinator()
+        # Ensure agent system is initialized (lazy)
+        agent_ready = await ensure_agent_system()
         
-        if coordinator is None:
+        if not agent_ready or coordinator_instance is None:
             # Fallback: Simple response without agents
             return QueryResponse(
                 query_id=query_id,
@@ -587,6 +452,8 @@ async def process_query(request: QueryRequest):
                 strategy_used=RetrievalStrategy.HYBRID,
                 entities_found=[]
             )
+        
+        coordinator = coordinator_instance
         
         # Execute the full workflow using the real coordinator (original approach)
         try:
@@ -783,7 +650,8 @@ async def upload_document(request: DocumentUploadRequest):
         from core.domain_processor import DomainProcessorManager
         from core.mapping_service import EntityVectorMappingService
         
-        # Get database managers (using our optimized function)
+        # Ensure databases are initialized and connected (lazy)
+        ensure_databases()
         neo4j_manager, vector_manager = get_database_managers()
         
         # Initialize processors
@@ -791,7 +659,7 @@ async def upload_document(request: DocumentUploadRequest):
         domain_processor = DomainProcessorManager()
         mapping_service = EntityVectorMappingService()
         
-        # Initialize the mapping service
+        # Initialize the mapping service (databases are now connected)
         mapping_service.initialize()
         
         # Get embedding service
@@ -931,35 +799,42 @@ async def upload_document_file(
 async def get_agents_status():
     """Get status of all agents with lazy initialization"""
     try:
-        coordinator = get_or_create_coordinator()
-        neo4j_manager, vector_manager = get_database_managers()
+        # Check initialization status without forcing initialization
+        agent_system_ready = initialization_status["agent_system"]
+        database_ready = initialization_status["databases"]
         
         agents_status = {
             "coordinator": {
-                "status": "healthy" if coordinator else "not_initialized",
+                "status": "healthy" if agent_system_ready and coordinator_instance else "not_initialized",
                 "type": "CoordinatorAgent",
-                "initialized": coordinator is not None
+                "initialized": agent_system_ready
+            },
+            "agent_registry": {
+                "status": "healthy" if agent_system_ready and agent_registry else "not_initialized",
+                "initialized": agent_system_ready,
+                "agent_count": len(getattr(agent_registry, 'agents', {})) if agent_registry else 0
             },
             "databases": {
                 "neo4j": {
-                    "status": "connected" if neo4j_manager else "not_connected",
-                    "initialized": neo4j_manager is not None
+                    "status": "connected" if database_ready else "not_initialized",
+                    "initialized": database_ready
                 },
                 "vector_db": {
-                    "status": "connected" if vector_manager else "not_connected", 
-                    "initialized": vector_manager is not None
+                    "status": "connected" if database_ready else "not_initialized", 
+                    "initialized": database_ready
                 }
             }
         }
         
         total_agents = 4  # Expected total
-        healthy_agents = sum(1 for agent in agents_status.values() if isinstance(agent, dict) and agent.get("status") == "healthy")
+        healthy_agents = len(getattr(agent_registry, 'agents', {})) if agent_registry else 0
         
         return {
             "agents": agents_status,
             "total_agents": total_agents,
             "healthy_agents": healthy_agents,
-            "initialization_strategy": "lazy_loading",
+            "initialization_strategy": "lazy_on_demand",
+            "initialization_status": initialization_status,
             "last_updated": datetime.now().isoformat()
         }
         
@@ -971,19 +846,19 @@ async def get_agents_status():
 async def get_system_status():
     """Get comprehensive system status including all components"""
     try:
-        coordinator = get_or_create_coordinator()
-        neo4j_manager, vector_manager = get_database_managers()
-        
-        # Test database connections
+        # Test database connections (lazy init)
         neo4j_status = "disconnected"
         vector_status = "disconnected"
         
-        if neo4j_manager:
-            try:
-                result = execute_neo4j_query("RETURN 1 as test")
-                neo4j_status = "connected" if result else "error"
-            except:
-                neo4j_status = "error"
+        if ensure_databases():
+            neo4j_manager, vector_manager = get_database_managers()
+            
+            if neo4j_manager:
+                try:
+                    result = execute_neo4j_query("RETURN 1 as test")
+                    neo4j_status = "connected" if result else "error"
+                except:
+                    neo4j_status = "error"
         
         if vector_manager:
             try:
@@ -1001,7 +876,7 @@ async def get_system_status():
             },
             "components": {
                 "api": "healthy",
-                "coordinator_agent": "healthy" if coordinator else "not_initialized",
+                "coordinator_agent": "healthy" if coordinator_instance else "not_initialized",
                 "neo4j": neo4j_status,
                 "vector_db": vector_status,
                 "static_files": "mounted" if os.path.exists("static") else "not_found"
@@ -1026,6 +901,7 @@ async def get_database_stats():
         
         # Neo4j Statistics
         try:
+            ensure_databases()
             neo4j_manager, _ = get_database_managers()
             if neo4j_manager:
                 # Execute all queries with single connection
@@ -1211,19 +1087,16 @@ async def clear_vector_database():
 @app.get("/system/init-status", tags=["system"])
 async def get_initialization_status():
     """Check the initialization status of all system components"""
-    global initialization_complete
-    
     return {
-        "background_initialization": {
-            "status": "complete" if initialization_complete else "in_progress",
-            "complete": initialization_complete
-        },
+        "initialization_strategy": "lazy_on_demand",
+        "status": initialization_status,
         "components": {
-            "coordinator": "initialized" if coordinator_instance else "pending",
-            "agent_registry": "initialized" if agent_registry else "pending",
-            "message_queue": "initialized" if message_queue else "pending"
+            "coordinator": "initialized" if coordinator_instance else "not_initialized",
+            "agent_registry": "initialized" if agent_registry else "not_initialized",
+            "message_queue": "initialized" if message_queue else "not_initialized",
+            "databases": "initialized" if initialization_status["databases"] else "not_initialized"
         },
-        "performance_note": "First queries may be slower while initialization completes",
+        "performance_note": "Components initialize on first use - subsequent calls are fast",
         "timestamp": datetime.now().isoformat()
     }
 
@@ -1234,36 +1107,25 @@ async def get_detailed_initialization_status():
         # Check database managers
         neo4j_manager, vector_manager = get_database_managers()
         
-        # Check agents
-        agents = get_or_create_all_agents()
-        
-        # Check core services
-        services = initialize_core_services()
-        
         return {
-            "initialization_status": {
+            "initialization_strategy": "lazy_on_demand",
+            "current_status": initialization_status,
+            "components": {
                 "databases": {
-                    "neo4j": "initialized" if neo4j_manager else "failed",
-                    "vector_db": "initialized" if vector_manager else "failed"
+                    "neo4j": "initialized" if initialization_status["databases"] else "not_initialized",
+                    "vector_db": "initialized" if initialization_status["databases"] else "not_initialized"
                 },
                 "agents": {
-                    "coordinator": "initialized" if agents.get('coordinator') else "failed",
-                    "graph_navigator": "initialized" if agents.get('graph_navigator') else "failed", 
-                    "vector_retrieval": "initialized" if agents.get('vector_retrieval') else "failed",
-                    "synthesis": "initialized" if agents.get('synthesis') else "failed",
-                    "agent_registry": "initialized" if agent_registry else "failed",
-                    "message_queue": "initialized" if message_queue else "failed"
-                },
-                "core_services": {
-                    "embedding": "initialized" if services.get('embedding') else "failed",
-                    "document_processor": "initialized" if services.get('document_processor') else "failed",
-                    "ingestion_pipeline": "initialized" if services.get('ingestion_pipeline') else "failed"
+                    "coordinator": "initialized" if coordinator_instance else "not_initialized",
+                    "agent_registry": "initialized" if agent_registry else "not_initialized",
+                    "message_queue": "initialized" if message_queue else "not_initialized",
+                    "agent_count": len(getattr(agent_registry, 'agents', {})) if agent_registry else 0
                 }
             },
             "summary": {
-                "total_components": 11,
-                "initialized": len([x for x in [neo4j_manager, vector_manager] + list(agents.values()) + list(services.values()) if x is not None]),
-                "failed": len([x for x in [neo4j_manager, vector_manager] + list(agents.values()) + list(services.values()) if x is None])
+                "agent_system": "initialized" if initialization_status["agent_system"] else "not_initialized",
+                "databases": "initialized" if initialization_status["databases"] else "not_initialized",
+                "note": "Components initialize automatically when first accessed"
             },
             "timestamp": datetime.now().isoformat()
         }
@@ -1282,21 +1144,24 @@ async def force_initialization():
         neo4j_manager, vector_manager = get_database_managers()
         
         # Force agent initialization
-        agents = get_or_create_all_agents()
+        agent_ready = await ensure_agent_system()
         
-        # Force core services initialization
-        services = initialize_core_services()
-        
-        initialized_count = len([x for x in [neo4j_manager, vector_manager] + list(agents.values()) + list(services.values()) if x is not None])
-        total_count = 11
+        # Force database initialization
+        db_ready = ensure_databases()
         
         return {
             "status": "completed",
-            "message": f"Force initialization completed: {initialized_count}/{total_count} components initialized",
-            "details": {
-                "databases": 2 if neo4j_manager and vector_manager else (1 if neo4j_manager or vector_manager else 0),
-                "agents": len([a for a in agents.values() if a is not None]),
-                "services": len([s for s in services.values() if s is not None])
+            "message": "Force initialization completed using lazy loading strategy",
+            "results": {
+                "agent_system": "initialized" if agent_ready else "failed",
+                "databases": "initialized" if db_ready else "failed"
+            },
+            "current_status": initialization_status,
+            "components": {
+                "coordinator": "initialized" if coordinator_instance else "failed",
+                "agent_registry": "initialized" if agent_registry else "failed",
+                "message_queue": "initialized" if message_queue else "failed",
+                "agent_count": len(getattr(agent_registry, 'agents', {})) if agent_registry else 0
             },
             "timestamp": datetime.now().isoformat()
         }
@@ -1435,102 +1300,103 @@ async def get_api_examples():
         "timestamp": datetime.now().isoformat()
     }
 
-# Background initialization flag
-initialization_complete = False
+# Lazy initialization tracking
+initialization_status = {
+    "agent_system": False,
+    "databases": False
+}
 
-async def background_initialization():
-    """Initialize system components in background after server starts"""
-    global initialization_complete, agent_registry, message_queue, coordinator_instance
+async def ensure_agent_system():
+    """Lazy initialization of agent system - only when needed"""
+    global agent_registry, message_queue, coordinator_instance, initialization_status
+    
+    if initialization_status["agent_system"]:
+        return True  # Already initialized
     
     try:
-        logger.info("🔄 Starting background initialization...")
+        logger.info("🔄 Initializing agent system on-demand...")
         
-        # Initialize agent communication system (exactly like original)
-        try:
-            logger.info("Initializing agent communication system...")
-            
-            # Initialize agent registry and message queue (original way)
-            from core.agent_registry import initialize_agent_registry
-            from core.message_queue import initialize_message_queue
-            
-            agent_registry = initialize_agent_registry()
-            message_queue = await initialize_message_queue()
-            
-            logger.info("✅ Agent communication system initialized")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize agent communication: {e}")
-            agent_registry = None
-            message_queue = None
+        # Initialize agent communication system
+        from core.agent_registry import initialize_agent_registry
+        from core.message_queue import initialize_message_queue
         
-        # Initialize and register agent instances (exactly like original)
-        try:
-            logger.info("Initializing and registering agent instances...")
-            
-            # Create global coordinator instance with communication system
-            from agents.coordinator import CoordinatorAgent
-            coordinator_instance = CoordinatorAgent(
-                "api_coordinator",
-                agent_registry=agent_registry,
-                message_queue=message_queue
-            )
-            
-            # Register coordinator
-            await agent_registry.register_agent(
-                "api_coordinator", 
-                coordinator_instance, 
-                "coordinator"
-            )
-            
-            # Create and register other agents (original way)
-            from agents.graph_navigator import GraphNavigatorAgent
-            from agents.vector_retrieval import VectorRetrievalAgent
-            from agents.synthesis import SynthesisAgent
-            
-            # Graph Navigator Agent
-            graph_navigator = GraphNavigatorAgent("graph_navigator")
-            await agent_registry.register_agent(
-                "graph_navigator",
-                graph_navigator,
-                "graph_navigator"
-            )
-            
-            # Vector Retrieval Agent
-            vector_retrieval = VectorRetrievalAgent(
-                agent_id="vector_retrieval",
-                model_name=getattr(config, 'embedding_model', 'all-MiniLM-L6-v2'),
-                collection_name=getattr(config, 'chroma_collection_name', 'documents')
-            )
-            await agent_registry.register_agent(
-                "vector_retrieval",
-                vector_retrieval,
-                "vector_retrieval"
-            )
-            
-            # Synthesis Agent
-            synthesis_agent = SynthesisAgent("synthesis")
-            await agent_registry.register_agent(
-                "synthesis",
-                synthesis_agent,
-                "synthesis"
-            )
-            
-            # Register message handlers with the queue (original way)
-            message_queue.register_handler("api_coordinator", coordinator_instance.process_message)
-            message_queue.register_handler("graph_navigator", graph_navigator.process_message)
-            message_queue.register_handler("vector_retrieval", vector_retrieval.process_message)
-            message_queue.register_handler("synthesis", synthesis_agent.process_message)
-            
-            logger.info("✅ All agents initialized and registered successfully")
-            logger.info(f"   📊 Registered agents: {len(agent_registry.agents)}")
-            
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize agents: {e}")
+        agent_registry = initialize_agent_registry()
+        message_queue = await initialize_message_queue()
         
-        initialization_complete = True
-        logger.info("🎉 Background initialization complete!")
+        # Create coordinator
+        from agents.coordinator import CoordinatorAgent
+        coordinator_instance = CoordinatorAgent(
+            "api_coordinator",
+            agent_registry=agent_registry,
+            message_queue=message_queue
+        )
+        
+        # Register coordinator
+        await agent_registry.register_agent(
+            "api_coordinator", 
+            coordinator_instance, 
+            "coordinator"
+        )
+        
+        # Create other agents
+        from agents.graph_navigator import GraphNavigatorAgent
+        from agents.vector_retrieval import VectorRetrievalAgent
+        from agents.synthesis import SynthesisAgent
+        
+        graph_navigator = GraphNavigatorAgent("graph_navigator")
+        await agent_registry.register_agent("graph_navigator", graph_navigator, "graph_navigator")
+        
+        vector_retrieval = VectorRetrievalAgent(
+            agent_id="vector_retrieval",
+            model_name=getattr(config, 'embedding_model', 'all-MiniLM-L6-v2'),
+            collection_name=getattr(config, 'chroma_collection_name', 'documents')
+        )
+        await agent_registry.register_agent("vector_retrieval", vector_retrieval, "vector_retrieval")
+        
+        synthesis_agent = SynthesisAgent("synthesis")
+        await agent_registry.register_agent("synthesis", synthesis_agent, "synthesis")
+        
+        # Register message handlers
+        message_queue.register_handler("api_coordinator", coordinator_instance.process_message)
+        message_queue.register_handler("graph_navigator", graph_navigator.process_message)
+        message_queue.register_handler("vector_retrieval", vector_retrieval.process_message)
+        message_queue.register_handler("synthesis", synthesis_agent.process_message)
+        
+        initialization_status["agent_system"] = True
+        logger.info(f"✅ Agent system initialized: {len(agent_registry.agents)} agents ready")
+        return True
         
     except Exception as e:
-        logger.error(f"❌ Background initialization failed: {e}")
+        logger.error(f"❌ Agent system initialization failed: {e}")
+        return False
+
+def ensure_databases():
+    """Lazy initialization of databases - only when needed"""
+    global initialization_status
+    
+    if initialization_status["databases"]:
+        return True  # Already initialized
+    
+    try:
+        logger.info("🔄 Initializing databases on-demand...")
+        # Get database managers through our singleton pattern
+        neo4j_manager, vector_manager = get_database_managers()
+        
+        # Ensure Neo4j connection is established
+        if neo4j_manager and not neo4j_manager.driver:
+            neo4j_manager.connect()
+            logger.info("✅ Neo4j connection established")
+        
+        # Vector manager should already be connected from get_database_managers()
+        if neo4j_manager and vector_manager:
+            initialization_status["databases"] = True
+            logger.info("✅ Databases initialized and connected")
+            return True
+        return False
+        
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
+        return False
 
 if __name__ == "__main__":
     host = getattr(config, 'HOST', os.environ.get("HOST", "0.0.0.0"))
