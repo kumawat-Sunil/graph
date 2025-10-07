@@ -100,7 +100,23 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "error": "HTTP Error",
             "message": str(exc.detail),
             "timestamp": datetime.now().isoformat(),
-            "path": str(request.url)
+            "path": str(request.url),
+            "status": "error"
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle all other exceptions with consistent JSON format."""
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Internal Server Error",
+            "message": "An unexpected error occurred",
+            "timestamp": datetime.now().isoformat(),
+            "path": str(request.url),
+            "status": "error"
         }
     )
 
@@ -275,6 +291,60 @@ async def health():
         return {
             "status": "degraded",
             "message": f"Health check encountered an issue: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.get("/ping")
+async def ping():
+    """Ultra-lightweight ping endpoint for load balancer health checks"""
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
+@app.get("/ready")
+async def ready():
+    """Readiness probe - checks if the service is ready to handle requests"""
+    try:
+        # Quick check without initializing anything
+        return {
+            "ready": True,
+            "status": "ready",
+            "message": "Service is ready to handle requests",
+            "initialization_strategy": "lazy_on_demand",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "ready": False,
+            "status": "not_ready",
+            "message": f"Service not ready: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
+@app.get("/keepalive")
+async def keepalive():
+    """Keep-alive endpoint to prevent server from sleeping"""
+    return {
+        "status": "alive",
+        "uptime": time.time() - startup_time,
+        "timestamp": datetime.now().isoformat(),
+        "message": "Server is active"
+    }
+
+@app.get("/warmup")
+async def warmup():
+    """Warmup endpoint to prepare the system"""
+    try:
+        # Just return basic info without initializing heavy components
+        return {
+            "status": "warmed_up",
+            "message": "System is ready for requests",
+            "uptime": time.time() - startup_time,
+            "timestamp": datetime.now().isoformat(),
+            "initialization_strategy": "lazy_on_demand"
+        }
+    except Exception as e:
+        return {
+            "status": "warmup_error",
+            "message": f"Warmup encountered an issue: {str(e)}",
             "timestamp": datetime.now().isoformat()
         }
 

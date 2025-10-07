@@ -703,17 +703,40 @@ function setupDragAndDrop() {
     });
 }
 
-// Check system status
-async function checkSystemStatus() {
+// Check system status with retry logic
+async function checkSystemStatus(retryCount = 0) {
     try {
-        const response = await fetch(`${API_BASE_URL}/health`);
-        const status = await response.json();
+        const response = await fetch(`${API_BASE_URL}/health`, {
+            timeout: 10000, // 10 second timeout
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+        });
         
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            throw new Error('Server returned non-JSON response (possibly 502 error page)');
+        }
+        
+        const status = await response.json();
         updateSystemStatus(status.status, status.components);
         
     } catch (error) {
         console.error('Failed to check system status:', error);
-        updateSystemStatus('error', {});
+        
+        // Retry logic for 502 errors
+        if (retryCount < 3 && (error.message.includes('502') || error.message.includes('non-JSON'))) {
+            console.log(`Retrying health check (attempt ${retryCount + 1}/3)...`);
+            setTimeout(() => checkSystemStatus(retryCount + 1), 2000 * (retryCount + 1)); // Exponential backoff
+            updateSystemStatus('retrying', {});
+        } else {
+            updateSystemStatus('error', {});
+        }
     }
 }
 
@@ -730,6 +753,12 @@ function updateSystemStatus(status, components) {
     } else if (status === 'unhealthy') {
         statusIndicator.classList.add('unhealthy');
         statusText.textContent = 'System Issues Detected';
+    } else if (status === 'retrying') {
+        statusIndicator.classList.add('warning');
+        statusText.textContent = 'Connecting to Server...';
+    } else if (status === 'error') {
+        statusIndicator.classList.add('error');
+        statusText.textContent = 'Connection Error - Please Refresh';
     } else {
         statusText.textContent = 'System Status Unknown';
     }

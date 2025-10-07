@@ -100,10 +100,22 @@ body {
 
 .status-indicator.healthy {
     background: #48bb78;
+    animation: none;
 }
 
 .status-indicator.unhealthy {
     background: #f56565;
+    animation: none;
+}
+
+.status-indicator.warning {
+    background: #ed8936;
+    animation: pulse 1.5s infinite;
+}
+
+.status-indicator.error {
+    background: #e53e3e;
+    animation: pulse 2s infinite;
 }
 
 @keyframes pulse {
